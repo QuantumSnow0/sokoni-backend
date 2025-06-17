@@ -1,12 +1,13 @@
 import express from "express";
 import "dotenv/config";
+import job from "./config/cron.js"
 import { Server } from "socket.io";
 import { requireAuth } from "@clerk/express";
 import usersRoutes from "./routes/users.route.js";
 import http from "http";
 import { productRoutes } from "./routes/products.route.js";
 import wishlistRoutes from "./routes/wishlist.route.js";
-
+job.start()
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
