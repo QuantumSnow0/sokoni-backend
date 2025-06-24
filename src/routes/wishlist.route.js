@@ -1,14 +1,14 @@
 import express from "express";
 import { requireAuth } from "@clerk/express";
-import {
-  toggleWishlistItem,
-  getUserWishlist,
-} from "../controllers/wishlist.controller.js";
+import { wishlistController } from "../controllers/wishlist.controller.js";
 
-const router = express.Router();
+export default function wishlistRoutes(io) {
+  const router = express.Router();
+  const { toggleWishlistItem, getUserWishlist } = wishlistController(io);
 
-// Protected routes
-router.post("/toggle",  toggleWishlistItem);
-router.get("/", getUserWishlist);
+  // Protected routes
+  router.post("/toggle", toggleWishlistItem);
+  router.get("/", getUserWishlist);
 
-export default router;
+  return router;
+}
