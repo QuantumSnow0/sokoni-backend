@@ -5,6 +5,7 @@ import {
   updateUserProfile,
   getUserAddresses,
   addUserAddress,
+  getAllUsers,
   updateUserAddress,
   deleteUserAddress,
 } from "../controllers/users.controller.js";
@@ -25,5 +26,6 @@ router.get("/addresses", getUserAddresses);
 router.post("/addresses", addUserAddress);
 router.put("/addresses/:addressId", updateUserAddress);
 router.delete("/addresses/:addressId", deleteUserAddress);
+router.get("/admin/all", getAllUsers);
 
 export default router;

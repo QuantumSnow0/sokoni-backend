@@ -7,8 +7,11 @@ import usersRoutes from "./routes/users.route.js";
 import http from "http";
 import cors from "cors";
 import { productRoutes } from "./routes/products.route.js";
+import { orderRoutes } from "./routes/order.route.js";
 import wishlistRoutes from "./routes/wishlist.route.js";
+import addressRoutes from "./routes/address.route.js";
 import "dotenv/config";
+import cartRoutes from "./routes/cart.route.js";
 const app = express();
 const server = http.createServer(app);
 const url = process.env.API_URL || "https://sokoni-backend-uvp5.onrender.com";
@@ -49,10 +52,13 @@ io.on("connection", (socket) => {
 app.use("/api/users", requireAuth(), usersRoutes);
 app.use("/api/products", productRoutes(io));
 app.use("/api/wishlist", requireAuth(), wishlistRoutes(io));
+app.use("/api/addresses", requireAuth(), addressRoutes);
+app.use("/api/orders", orderRoutes(io));
+app.use("/api/cart", requireAuth(), cartRoutes(io));
 
 // ✅ Start server
 const PORT = process.env.PORT || 5001;
-job.start();
+// job.start();
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on ${url}:${PORT}`);

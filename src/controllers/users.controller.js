@@ -119,3 +119,13 @@ export const deleteUserAddress = async (req, res) => {
       .json({ error: "Failed to delete address", detail: err.message });
   }
 };
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await sql`SELECT * FROM users ORDER BY created_at DESC`; // if you have created_at
+    res.json(users);
+  } catch (err) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch users", detail: err.message });
+  }
+};
