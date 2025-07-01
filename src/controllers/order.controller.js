@@ -1,8 +1,7 @@
 import { sql } from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
 
-// CREATE ORDER (Checkout)
-
+// ✅ CREATE ORDER
 export const createOrder = (io) => async (req, res) => {
   const userId = req.auth.userId;
   const {
@@ -15,7 +14,7 @@ export const createOrder = (io) => async (req, res) => {
     return res.status(400).json({ message: "Shipping address is required" });
   }
 
-  const client = sql; // Reuse sql directly as neon doesn't use client.connect()
+  const client = sql;
 
   try {
     const cartItems = await client`
@@ -47,13 +46,17 @@ export const createOrder = (io) => async (req, res) => {
         return sum + itemPrice * item.quantity;
       }, 0) + Number(shipping_fee);
 
-    // 🔐 Begin manual transaction
     await client`BEGIN`;
 
-    // Insert order
     const result = await client`
-      INSERT INTO orders (user_id, status, payment_method, total_amount, shipping_fee, discount)
-      VALUES (${userId}, 'pending', ${payment_method}, ${total_amount}, ${shipping_fee}, ${totalDiscount})
+      INSERT INTO orders (
+        user_id, status, payment_method, total_amount,
+        shipping_fee, discount, shipping_address
+      )
+      VALUES (
+        ${userId}, 'placed', ${payment_method}, ${total_amount},
+        ${shipping_fee}, ${totalDiscount}, ${shipping_address}
+      )
       RETURNING id
     `;
     const orderId = result[0].id;
@@ -61,10 +64,13 @@ export const createOrder = (io) => async (req, res) => {
     for (const item of cartItems) {
       const itemPrice = item.price * (1 - item.discount / 100);
       await client`
-        INSERT INTO order_items (id, order_id, product_id, quantity, price, discount)
-        VALUES (${uuidv4()}, ${orderId}, ${item.product_id}, ${
-        item.quantity
-      }, ${itemPrice}, ${item.discount})
+        INSERT INTO order_items (
+          id, order_id, product_id, quantity, price, discount
+        )
+        VALUES (
+          ${uuidv4()}, ${orderId}, ${item.product_id},
+          ${item.quantity}, ${itemPrice}, ${item.discount}
+        )
       `;
 
       await client`
@@ -80,7 +86,6 @@ export const createOrder = (io) => async (req, res) => {
 
     await client`COMMIT`;
 
-    // 🔔 Emit events
     io.to(userId).emit("order:created", {
       orderId,
       total_amount,
@@ -101,13 +106,18 @@ export const createOrder = (io) => async (req, res) => {
   }
 };
 
-// GET USER ORDERS
+// ✅ GET ALL ORDERS FOR A USER
 export const getUserOrders = async (req, res) => {
   const userId = req.auth.userId;
 
   try {
     const orders = await sql`
-      SELECT o.id, o.status, o.payment_method, o.total_amount, o.shipping_fee, o.discount, o.created_at,
+      SELECT o.id, o.status, o.payment_method, o.total_amount,
+             o.shipping_fee, o.discount, o.created_at,
+             a.full_name AS address_full_name,
+             a.region AS address_region,
+             a.street AS address_street,
+             a.phone AS address_phone,
              array_agg(
                json_build_object(
                  'product_id', oi.product_id,
@@ -121,24 +131,42 @@ export const getUserOrders = async (req, res) => {
       FROM orders o
       LEFT JOIN order_items oi ON o.id = oi.order_id
       LEFT JOIN products p ON oi.product_id = p.id
+      LEFT JOIN addresses a ON o.shipping_address = a.id
       WHERE o.user_id = ${userId}
-      GROUP BY o.id
+      GROUP BY o.id, a.full_name, a.region, a.street, a.phone
+      ORDER BY o.created_at DESC
     `;
-    res.json(orders);
+
+    const formatted = orders.map((o) => ({
+      ...o,
+      shipping_address: {
+        full_name: o.address_full_name,
+        region: o.address_region,
+        street: o.address_street,
+        phone: o.address_phone,
+      },
+    }));
+
+    res.json(formatted);
   } catch (err) {
     console.error("Error fetching orders:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// GET SINGLE ORDER
+// ✅ GET SINGLE ORDER BY ID
 export const getOrderById = async (req, res) => {
   const userId = req.auth.userId;
   const { id } = req.params;
 
   try {
-    const orders = await sql`
-      SELECT o.id, o.status, o.payment_method, o.total_amount, o.shipping_fee, o.discount, o.created_at,
+    const result = await sql`
+      SELECT o.id, o.status, o.payment_method, o.total_amount, o.shipping_fee,
+             o.discount, o.created_at,
+             a.full_name AS address_full_name,
+             a.region AS address_region,
+             a.street AS address_street,
+             a.phone AS address_phone,
              array_agg(
                json_build_object(
                  'product_id', oi.product_id,
@@ -152,26 +180,39 @@ export const getOrderById = async (req, res) => {
       FROM orders o
       LEFT JOIN order_items oi ON o.id = oi.order_id
       LEFT JOIN products p ON oi.product_id = p.id
+      LEFT JOIN addresses a ON o.shipping_address = a.id
       WHERE o.id = ${id} AND o.user_id = ${userId}
-      GROUP BY o.id
+      GROUP BY o.id, a.full_name, a.region, a.street, a.phone
     `;
 
-    if (orders.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    res.json(orders[0]);
+    const order = result[0];
+
+    res.json({
+      ...order,
+      shipping_address: {
+        full_name: order.address_full_name,
+        region: order.address_region,
+        street: order.address_street,
+        phone: order.address_phone,
+      },
+    });
   } catch (err) {
     console.error("Error fetching order:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// ✅ ADMIN - GET ALL ORDERS
 export const getAllOrdersAdmin = async (req, res) => {
   try {
     const orders = await sql`
-      SELECT o.id, o.user_id, o.status, o.payment_method, 
+      SELECT o.id, o.user_id, o.status, o.payment_method,
              o.total_amount, o.shipping_fee, o.discount, o.created_at,
-             u.name as customer_name, u.email as customer_email,
+             u.name AS customer_name, u.email AS customer_email,
              array_agg(
                json_build_object(
                  'product_id', oi.product_id,
@@ -189,9 +230,64 @@ export const getAllOrdersAdmin = async (req, res) => {
       GROUP BY o.id, u.name, u.email
       ORDER BY o.created_at DESC
     `;
+
     res.json(orders);
   } catch (err) {
     console.error("Error fetching all orders:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// ✅ ADMIN - UPDATE ORDER STATUS
+
+export const updateOrderStatus = (io) => async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  // ✅ Updated status list
+  const allowedStatuses = [
+    "placed",
+    "confirmed",
+    "out_for_delivery",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "rejected",
+  ];
+
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+
+  try {
+    const result = await sql`
+      UPDATE orders
+      SET status = ${status}
+      WHERE id = ${id}
+      RETURNING user_id
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const userId = result[0].user_id;
+    console.log("🚀 Emitting status update to:", userId, status);
+
+    // ✅ Emit to specific user
+    io.to(userId).emit("order:status:updated", {
+      orderId: id,
+      status,
+    });
+
+    // ✅ Emit to admins
+    io.emit("admin:order:statusUpdated", {
+      orderId: id,
+      status,
+    });
+
+    res.json({ message: "Order status updated", orderId: id, status });
+  } catch (err) {
+    console.error("Error updating order status:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -10,25 +10,33 @@ import { productRoutes } from "./routes/products.route.js";
 import { orderRoutes } from "./routes/order.route.js";
 import wishlistRoutes from "./routes/wishlist.route.js";
 import addressRoutes from "./routes/address.route.js";
-import "dotenv/config";
 import cartRoutes from "./routes/cart.route.js";
+import analyticsRoutes from "./routes/analytics.route.js";
+
 const app = express();
 const server = http.createServer(app);
-const url = process.env.API_URL || "https://sokoni-backend-uvp5.onrender.com";
+
+// ✅ Allow multiple origins for CORS
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://192.168.135.31:5173", // your LAN IP
+  "https://sokoni-backend-uvp5.onrender.com", // optional: keep this if you're tunneling
+];
+
 // ✅ CORS for HTTP (Express)
 app.use(
   cors({
-    origin: url,
+    origin: allowedOrigins,
     credentials: true,
   })
 );
 
 app.use(express.json());
 
-// ✅ Create Socket.IO server
+// ✅ Create Socket.IO server with matching CORS
 const io = new Server(server, {
   cors: {
-    origin: url, // ✅ same as above
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -40,7 +48,7 @@ io.on("connection", (socket) => {
   const userId = socket.handshake.auth?.userId;
   if (userId) {
     console.log(`✅ ${userId} joined room`);
-    socket.join(userId); // 🎯 key line
+    socket.join(userId);
   }
 
   socket.on("disconnect", () => {
@@ -54,12 +62,11 @@ app.use("/api/products", productRoutes(io));
 app.use("/api/wishlist", requireAuth(), wishlistRoutes(io));
 app.use("/api/addresses", requireAuth(), addressRoutes);
 app.use("/api/orders", orderRoutes(io));
+app.use("/api/admin", requireAuth(), analyticsRoutes);
 app.use("/api/cart", requireAuth(), cartRoutes(io));
 
 // ✅ Start server
 const PORT = process.env.PORT || 5001;
-// job.start();
-
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running on ${url}:${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
