@@ -10,6 +10,7 @@ import { productRoutes } from "./routes/products.route.js";
 import { orderRoutes } from "./routes/order.route.js";
 import wishlistRoutes from "./routes/wishlist.route.js";
 import addressRoutes from "./routes/address.route.js";
+import { createCategoryRoutes } from "./routes/category.route.js"; // Adjust path
 import cartRoutes from "./routes/cart.route.js";
 import analyticsRoutes from "./routes/analytics.route.js";
 
@@ -64,6 +65,7 @@ app.use("/api/addresses", requireAuth(), addressRoutes);
 app.use("/api/orders", orderRoutes(io));
 app.use("/api/admin", requireAuth(), analyticsRoutes);
 app.use("/api/cart", requireAuth(), cartRoutes(io));
+app.use("/api/categories", createCategoryRoutes(io));
 
 // ✅ Start server
 const PORT = process.env.PORT || 5001;
