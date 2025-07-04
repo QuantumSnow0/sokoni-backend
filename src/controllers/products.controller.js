@@ -3,8 +3,37 @@ import { sql } from "../config/db.js";
 
 export const productController = (io) => ({
   getAllProducts: async (req, res) => {
-    const products = await sql`SELECT * FROM products ORDER BY created_at DESC`;
-    res.json(products);
+    try {
+      let {
+        minPrice = 0,
+        maxPrice = 999999,
+        category,
+        sort, // "priceAsc", "priceDesc", etc.
+      } = req.query;
+
+      minPrice = parseFloat(minPrice);
+      maxPrice = parseFloat(maxPrice);
+
+      let query = sql`SELECT * FROM products WHERE price BETWEEN ${minPrice} AND ${maxPrice}`;
+
+      if (category) {
+        query = sql`${query} AND LOWER(category) = LOWER(${category})`;
+      }
+
+      if (sort === "priceAsc") {
+        query = sql`${query} ORDER BY price ASC`;
+      } else if (sort === "priceDesc") {
+        query = sql`${query} ORDER BY price DESC`;
+      } else {
+        query = sql`${query} ORDER BY created_at DESC`; // Default
+      }
+
+      const products = await query;
+      res.json(products);
+    } catch (err) {
+      console.error("Error fetching filtered products:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
   },
 
   getProductById: async (req, res) => {
